@@ -30,16 +30,12 @@ def extract_screenshot(video_path, output_path, timestamp_seconds=13):
     # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = total_frames / fps
-    
-    print(f"Video duration: {duration:.2f} seconds")
-    print(f"Video FPS: {fps:.2f}")
+    duration = total_frames / fps if fps > 0 else 0
     
     # Check if timestamp is within video duration
     if timestamp_seconds > duration:
-        print(f"Error: Timestamp {timestamp_seconds}s exceeds video duration {duration:.2f}s")
-        cap.release()
-        return False
+        print(f"Warning: Timestamp {timestamp_seconds}s exceeds video duration {duration:.2f}s, using last frame")
+        timestamp_seconds = max(0, duration - 1)
     
     # Calculate frame number for the timestamp
     frame_number = int(timestamp_seconds * fps)
@@ -64,7 +60,7 @@ def extract_screenshot(video_path, output_path, timestamp_seconds=13):
     success = cv2.imwrite(output_path, frame)
     
     if success:
-        print(f"Screenshot saved successfully: {output_path}")
+        print(f"Screenshot saved: {os.path.basename(output_path)}")
     else:
         print(f"Error: Could not save screenshot to: {output_path}")
     
@@ -74,11 +70,15 @@ def extract_screenshot(video_path, output_path, timestamp_seconds=13):
     return success
 
 def main():
-    # Define paths - anonymized structure
+    """Main function for standalone usage - kept for backward compatibility."""
+    # Define paths - use the actual directory structure
     base_test_dir = "test"
-    report_dir = "Event_Report"  # Anonymized from specific report name
-    video_path = os.path.join(base_test_dir, "extracted_report", report_dir, "media", "0", "eventVideo.mkv")
-    output_path = os.path.join("screenshots", "event_0_screenshot_13s.jpg")
+    # The actual structure has the report name twice in the path
+    unzipped_dir = "Unzipped_TestBoscaccio_Event_Report_t0604004_from_2025-06-08-00-00-00_to_2025-06-11-23-59-59"
+    report_dir = "Event_Report_t0604004_from_2025-06-08-00-00-00_to_2025-06-11-23-59-59"
+    
+    video_path = os.path.join(base_test_dir, unzipped_dir, report_dir, "media", "0", "eventVideo.mkv")
+    output_path = os.path.join("screenshots", "event_0_screenshot_13s.png")
     
     # Extract screenshot at 13 seconds
     timestamp = 13
