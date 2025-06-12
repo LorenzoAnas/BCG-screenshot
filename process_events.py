@@ -10,6 +10,8 @@ from extract_screenshot import extract_screenshot
 class MultiServerEventProcessor:
     def __init__(self, screenshot_timestamp=13):
         self.screenshot_timestamp = screenshot_timestamp
+        self.event_categories_summary = {}  # Track categories across all servers
+        self.all_excel_data = []  # Store all Excel data for merging
     
     def extract_server_from_sensor_name(self, sensor_name):
         """Extract server ID from sensor name (first 8 characters)."""
@@ -291,6 +293,10 @@ class MultiServerEventProcessor:
         """Main processing function for multiple servers and ZIP files."""
         print("🔍 Scanning directory...")
         
+        # Reset summary data for new processing
+        self.event_categories_summary = {}
+        self.all_excel_data = []
+        
         # Scan directory
         zip_files_by_server, csv_files = self.scan_directory(directory)
         
@@ -336,6 +342,9 @@ class MultiServerEventProcessor:
             temp_base_dir = os.path.join(directory, "temp_processing")
             os.makedirs(temp_base_dir, exist_ok=True)
             
+            # Store the date_range for merged report path
+            merged_report_date_range = None
+            
             try:
                 for server_id, report in coverage_reports.items():
                     if not report['covered_events']:
@@ -354,6 +363,7 @@ class MultiServerEventProcessor:
                     
                     # Create output structure
                     date_range = f"{start_date}_{end_date}"
+                    merged_report_date_range = date_range  # Store for merged report
                     output_dir = os.path.join(date_range, server_id, "media")
                     screenshots_dir = os.path.join(output_dir, "screenshots")
                     videos_dir = os.path.join(output_dir, "video")
@@ -408,6 +418,12 @@ class MultiServerEventProcessor:
                             description = event.get('Description', '')
                             datetime_str = event.get('Date/Time', '')
                             
+                            # Track event categories
+                            if description not in self.event_categories_summary:
+                                self.event_categories_summary[description] = {'count': 0, 'servers': set()}
+                            self.event_categories_summary[description]['count'] += 1
+                            self.event_categories_summary[description]['servers'].add(server_id)
+                            
                             dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
                             formatted_datetime = dt.strftime("%Y-%m-%d-%H-%M-%S")
                             
@@ -426,6 +442,7 @@ class MultiServerEventProcessor:
                                 
                                 # Add to Excel data with relative path
                                 excel_row = {
+                                    'Server': server_id,  # Add server column for merged report
                                     'Name': name,
                                     'Description': description,
                                     'Date/Time': dt.strftime("%d/%m/%Y %H:%M"),
@@ -436,11 +453,19 @@ class MultiServerEventProcessor:
                                     'Screenshot': os.path.join(server_id, "media", "screenshots", screenshot_name).replace('\\', '/')  # Proper relative path
                                 }
                                 excel_data.append(excel_row)
+                                
+                                # Add to global data for merged report (with different screenshot path)
+                                merged_excel_row = excel_row.copy()
+                                # Use the same relative path as individual reports since merged report is in same directory
+                                merged_excel_row['Screenshot'] = os.path.join(server_id, "media", "screenshots", screenshot_name).replace('\\', '/')
+                                self.all_excel_data.append(merged_excel_row)
                     
-                    # Create Excel file
+                    # Create individual server Excel file
                     if excel_data:
                         excel_path = os.path.join(date_range, f"{server_id}_events_report.xlsx")
-                        self.create_excel_with_links(excel_data, excel_path)
+                        # Remove 'Server' column for individual reports
+                        individual_excel_data = [{k: v for k, v in row.items() if k != 'Server'} for row in excel_data]
+                        self.create_excel_with_links(individual_excel_data, excel_path)
                         print(f"📊 Excel file created: {excel_path}")
                     
                     # Cleanup temporary directories for this server
@@ -458,8 +483,80 @@ class MultiServerEventProcessor:
                 if os.path.exists(temp_base_dir):
                     shutil.rmtree(temp_base_dir)
         
+        # Ask user if they want to create merged report
+        if self.all_excel_data:
+            print(f"\n📊 Individual server reports have been created.")
+            print(f"Found {len(self.all_excel_data)} total events across all servers.")
+            
+            merge_response = input("Do you want to create a merged Excel report with all events? (y/n): ").strip().lower()
+            if merge_response == 'y':
+                self.create_merged_report(merged_report_date_range)
+            else:
+                print("⏭️  Skipping merged report creation.")
+        
+        # Display final summary
+        self.display_final_summary()
+        
         print("\n✅ Processing completed!")
         return True
+    
+    def create_merged_report(self, date_range_dir):
+        """Create a merged Excel report with all events from all servers."""
+        if not self.all_excel_data:
+            print("⚠️  No data to merge")
+            return
+        
+        # Sort by date/time for better readability
+        self.all_excel_data.sort(key=lambda x: datetime.strptime(x['Date/Time'], "%d/%m/%Y %H:%M"))
+        
+        # Create merged Excel file in the same date range directory as individual reports
+        if date_range_dir:
+            merged_excel_path = os.path.join(date_range_dir, "complete_events_report.xlsx")
+        else:
+            # Fallback to current directory if no date range available
+            merged_excel_path = "complete_events_report.xlsx"
+        
+        self.create_excel_with_links(self.all_excel_data, merged_excel_path)
+        
+        print(f"\n📊 Merged report created: {merged_excel_path}")
+        print(f"   Total events: {len(self.all_excel_data)}")
+    
+    def display_final_summary(self):
+        """Display final summary of event categories across all servers."""
+        if not self.event_categories_summary:
+            print("\n📋 No events processed for summary")
+            return
+        
+        print("\n" + "="*60)
+        print("📋 FINAL SUMMARY - Event Categories Across All Servers")
+        print("="*60)
+        
+        total_events = sum(cat['count'] for cat in self.event_categories_summary.values())
+        total_servers = len(set().union(*[cat['servers'] for cat in self.event_categories_summary.values()]))
+        
+        print(f"Total Events Processed: {total_events}")
+        print(f"Total Servers Analyzed: {total_servers}")
+        print(f"Event Categories Found: {len(self.event_categories_summary)}")
+        print("\nBreakdown by Category:")
+        print("-" * 60)
+        
+        # Sort categories by count (descending)
+        sorted_categories = sorted(
+            self.event_categories_summary.items(),
+            key=lambda x: x[1]['count'],
+            reverse=True
+        )
+        
+        for category, data in sorted_categories:
+            servers_list = sorted(list(data['servers']))
+            percentage = (data['count'] / total_events) * 100 if total_events > 0 else 0
+            
+            print(f"📌 {category}")
+            print(f"   Count: {data['count']} events ({percentage:.1f}%)")
+            print(f"   Servers: {', '.join(servers_list)}")
+            print()
+        
+        print("="*60)
 
 def main():
     processor = MultiServerEventProcessor(screenshot_timestamp=13)
