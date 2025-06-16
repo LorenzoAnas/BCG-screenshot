@@ -1,6 +1,5 @@
 import cv2
 import os
-import sys
 
 def extract_screenshot(video_path, output_path, timestamp_seconds=13):
     """
@@ -68,33 +67,3 @@ def extract_screenshot(video_path, output_path, timestamp_seconds=13):
     cap.release()
     
     return success
-
-def main():
-    """Main function for standalone usage - kept for backward compatibility."""
-    # Define paths - use the actual directory structure
-    base_test_dir = "test"
-    # The actual structure has the report name twice in the path
-    unzipped_dir = "Unzipped_TestBoscaccio_Event_Report_t0604004_from_2025-06-08-00-00-00_to_2025-06-11-23-59-59"
-    report_dir = "Event_Report_t0604004_from_2025-06-08-00-00-00_to_2025-06-11-23-59-59"
-    
-    video_path = os.path.join(base_test_dir, unzipped_dir, report_dir, "media", "0", "eventVideo.mkv")
-    output_path = os.path.join("screenshots", "event_0_screenshot_13s.png")
-    
-    # Extract screenshot at 13 seconds
-    timestamp = 13
-    
-    print(f"Extracting screenshot from: {video_path}")
-    print(f"At timestamp: {timestamp} seconds")
-    print(f"Output path: {output_path}")
-    print("-" * 50)
-    
-    success = extract_screenshot(video_path, output_path, timestamp)
-    
-    if success:
-        print("Screenshot extraction completed successfully!")
-    else:
-        print("Screenshot extraction failed!")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
