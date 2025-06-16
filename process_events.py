@@ -398,12 +398,14 @@ class MultiServerEventProcessor:
                     # Create output structure
                     date_range = f"{start_date}_{end_date}"
                     merged_report_date_range = date_range  # Store for merged report
-                    output_dir = os.path.join(date_range, server_id, "media")
+                    output_dir = os.path.join(date_range, server_id)
                     screenshots_dir = os.path.join(output_dir, "screenshots")
                     videos_dir = os.path.join(output_dir, "video")
+                    event_reports_dir = os.path.join(output_dir, "eventReports")
                     
                     os.makedirs(screenshots_dir, exist_ok=True)
                     os.makedirs(videos_dir, exist_ok=True)
+                    os.makedirs(event_reports_dir, exist_ok=True)
                     
                     excel_data = []
                     temp_dirs_to_cleanup = []
@@ -480,7 +482,7 @@ class MultiServerEventProcessor:
                                 snapshot_source = os.path.join(media_folder, "eventSnapshot.jpg")
                                 if os.path.exists(snapshot_source):
                                     snapshot_name = f"{name}_{description}_{formatted_datetime}_eventSnapshot.jpg"
-                                    snapshot_output_path = os.path.join(screenshots_dir, snapshot_name)
+                                    snapshot_output_path = os.path.join(event_reports_dir, snapshot_name)
                                     shutil.copy2(snapshot_source, snapshot_output_path)
                                     print(f"📷 Copied event snapshot: {snapshot_name}")
                                 else:
@@ -523,13 +525,13 @@ class MultiServerEventProcessor:
                                     'True Event': true_event_value,  # Copy True Event from input CSV
                                     'Data Intervento': '',
                                     'Attività svolta': '',
-                                    'Screenshot': os.path.join(server_id, "media", "screenshots", screenshot_name).replace('\\', '/')  # Proper relative path
+                                    'Screenshot': os.path.join(server_id, "screenshots", screenshot_name).replace('\\', '/')  # Updated relative path
                                 }
                                 excel_data.append(excel_row)
                                 
                                 # Add to global data for merged report
                                 merged_excel_row = excel_row.copy()
-                                merged_excel_row['Screenshot'] = os.path.join(server_id, "media", "screenshots", screenshot_name).replace('\\', '/')
+                                merged_excel_row['Screenshot'] = os.path.join(server_id, "screenshots", screenshot_name).replace('\\', '/')
                                 self.all_excel_data.append(merged_excel_row)
                     
                     # Create individual server Excel file
