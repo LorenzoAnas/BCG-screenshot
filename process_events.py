@@ -25,6 +25,8 @@ class MultiServerEventProcessor:
         pattern = r'Event_Report_([^_]+)_from_(\d{4}-\d{2}-\d{2})-(\d{2})-(\d{2})-(\d{2})_to_(\d{4}-\d{2}-\d{2})-(\d{2})-(\d{2})-(\d{2})'
         match = re.search(pattern, zip_filename)
         
+        # The following logic assumes the date format is YYYY-MM-DD and time is HH-MM-SS
+        # Adjust the regex pattern if your date/time format is different
         if match:
             server_id = match.group(1)
             start_date = match.group(2)
@@ -86,13 +88,30 @@ class MultiServerEventProcessor:
                 if i < 3:
                     print(f"DEBUG: Row {i}: Sensor='{sensor_name}', Server='{server_id}'")
                 
-                # Parse datetime
-                try:
-                    event_datetime = datetime.strptime(row['Date/Time'], "%Y-%m-%d %H:%M:%S")
-                    row['datetime_obj'] = event_datetime
-                except Exception as e:
-                    print(f"Warning: Could not parse datetime for row {i}: {row.get('Date/Time', '')} - {e}")
+                # Parse datetime - try multiple formats
+                datetime_str = row.get('Date/Time', '')
+                event_datetime = None
+                
+                # Try different datetime formats
+                datetime_formats = [
+                    "%Y-%m-%d %H:%M:%S",  # Original format: 2025-06-12 23:49:33
+                    "%d/%m/%Y %H:%M",     # New format: 12/06/2025 23:58
+                    "%Y-%m-%d %H:%M",     # Alternative: 2025-06-12 23:49
+                    "%d/%m/%Y %H:%M:%S"   # Alternative: 12/06/2025 23:58:00
+                ]
+                
+                for fmt in datetime_formats:
+                    try:
+                        event_datetime = datetime.strptime(datetime_str, fmt)
+                        break
+                    except ValueError:
+                        continue
+                
+                if event_datetime is None:
+                    print(f"Warning: Could not parse datetime for row {i}: {datetime_str} - tried multiple formats")
                     continue
+                
+                row['datetime_obj'] = event_datetime
                 
                 # Initialize server group if not exists
                 if server_id not in events_by_server:
@@ -101,6 +120,11 @@ class MultiServerEventProcessor:
                 # Store the clean sensor name and global index
                 row['Name'] = sensor_name
                 row['global_index'] = len(events_by_server[server_id])  # Global index for this server
+                
+                # Debug: Print True Event value for first few rows
+                if i < 3:
+                    print(f"DEBUG: True Event in CSV: '{row.get('True Event', 'NOT_FOUND')}'")
+                    print(f"DEBUG: All row keys: {list(row.keys())}")
                 
                 # Add to server group
                 events_by_server[server_id].append(row)
@@ -247,8 +271,18 @@ class MultiServerEventProcessor:
         # Create unique temporary directory
         temp_dir = os.path.join(temp_base_dir, f"temp_{zip_info['server_id']}_{zip_info['start_datetime'].strftime('%Y%m%d_%H%M%S')}")
         
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+        except zipfile.BadZipFile as e:
+            print(f"❌ Corrupted ZIP file: {zip_info['filename']}")
+            print(f"   Error: {e}")
+            print(f"   Please re-upload/re-download this ZIP file")
+            return None, temp_dir
+        except Exception as e:
+            print(f"❌ Error extracting ZIP file: {zip_info['filename']}")
+            print(f"   Error: {e}")
+            return None, temp_dir
         
         # Find the Event_Report directory
         event_report_dir = None
@@ -424,9 +458,11 @@ class MultiServerEventProcessor:
                             self.event_categories_summary[description]['count'] += 1
                             self.event_categories_summary[description]['servers'].add(server_id)
                             
-                            dt = datetime.strptime(datetime_str, "%Y-%m-%d %H:%M:%S")
+                            # Use the already parsed datetime object instead of reparsing
+                            dt = event['datetime_obj']  # This was already parsed in read_and_group_events_by_server
                             formatted_datetime = dt.strftime("%Y-%m-%d-%H-%M-%S")
                             
+
                             screenshot_name = f"{name}_{description}_{formatted_datetime}.png"
                             screenshot_path = os.path.join(screenshots_dir, screenshot_name)
                             
@@ -440,23 +476,59 @@ class MultiServerEventProcessor:
                                 video_output_path = os.path.join(videos_dir, video_name)
                                 shutil.copy2(video_file, video_output_path)
                                 
+                                # Copy event snapshot if it exists
+                                snapshot_source = os.path.join(media_folder, "eventSnapshot.jpg")
+                                if os.path.exists(snapshot_source):
+                                    snapshot_name = f"{name}_{description}_{formatted_datetime}_eventSnapshot.jpg"
+                                    snapshot_output_path = os.path.join(screenshots_dir, snapshot_name)
+                                    shutil.copy2(snapshot_source, snapshot_output_path)
+                                    print(f"📷 Copied event snapshot: {snapshot_name}")
+                                else:
+                                    print(f"⚠️  Event snapshot not found for: {name} (media folder {zip_media_index})")
+                                
+                                # Parse End Date/Time with multiple formats
+                                end_datetime_str = event.get('End Date/Time', '')
+                                formatted_end_datetime = '-'
+                                
+                                if end_datetime_str and end_datetime_str != '-':
+                                    end_datetime_formats = [
+                                        "%Y-%m-%d %H:%M:%S",  # Original format
+                                        "%d/%m/%Y %H:%M",     # New format
+                                        "%Y-%m-%d %H:%M",     # Alternative
+                                        "%d/%m/%Y %H:%M:%S"   # Alternative
+                                    ]
+                                    
+                                    for fmt in end_datetime_formats:
+                                        try:
+                                            end_dt = datetime.strptime(end_datetime_str, fmt)
+                                            formatted_end_datetime = end_dt.strftime("%d/%m/%Y %H:%M")
+                                            break
+                                        except ValueError:
+                                            continue
+                                
                                 # Add to Excel data with relative path
+                                true_event_value = event.get('True Event', '')
+                                
+                                # Debug: Print True Event value being added to Excel
+                                if len(excel_data) < 3:  # Only for first few events
+                                    print(f"DEBUG: True Event value being added to Excel: '{true_event_value}'")
+                                    print(f"DEBUG: Available keys in event: {list(event.keys())}")
+                                
                                 excel_row = {
                                     'Server': server_id,  # Add server column for merged report
                                     'Name': name,
                                     'Description': description,
                                     'Date/Time': dt.strftime("%d/%m/%Y %H:%M"),
-                                    'End Date/Time': datetime.strptime(event.get('End Date/Time', ''), "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M") if event.get('End Date/Time') else '',
-                                    'True Event': '',
+                                    'End Date/Time': formatted_end_datetime,
+                                    'True Event': true_event_value,  # Copy True Event from input CSV
                                     'Data Intervento': '',
                                     'Attività svolta': '',
                                     'Screenshot': os.path.join(server_id, "media", "screenshots", screenshot_name).replace('\\', '/')  # Proper relative path
                                 }
                                 excel_data.append(excel_row)
                                 
-                                # Add to global data for merged report (with different screenshot path)
+                                # Add to global data for merged report
                                 merged_excel_row = excel_row.copy()
-                                # Use the same relative path as individual reports since merged report is in same directory
                                 merged_excel_row['Screenshot'] = os.path.join(server_id, "media", "screenshots", screenshot_name).replace('\\', '/')
                                 self.all_excel_data.append(merged_excel_row)
                     
