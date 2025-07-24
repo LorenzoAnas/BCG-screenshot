@@ -304,7 +304,7 @@ class MultiServerEventProcessor:
                     'Server': server_id,
                     'Name': name,
                     'Description': description,
-                    'Date/Time': dt.strftime("%d/%m/%Y %H:%M"),
+                    'Date/Time': dt.strftime("%d/%m/%Y %H:%M:%S"),  # Include seconds
                     'End Date/Time': formatted_end_datetime,
                     'True Event': true_event_value,
                     'Data Intervento': '',
@@ -394,7 +394,7 @@ class MultiServerEventProcessor:
                     'Server': server_id,  # Add server column for merged report
                     'Name': name,
                     'Description': description,
-                    'Date/Time': dt.strftime("%d/%m/%Y %H:%M"),
+                    'Date/Time': dt.strftime("%d/%m/%Y %H:%M:%S"),  # Include seconds
                     'End Date/Time': formatted_end_datetime,
                     'True Event': true_event_value,  # Copy True Event from input CSV
                     'Data Intervento': '',
@@ -416,7 +416,7 @@ class MultiServerEventProcessor:
             for fmt in DATETIME_FORMATS:
                 try:
                     end_dt = datetime.strptime(end_datetime_str, fmt)
-                    formatted_end_datetime = end_dt.strftime("%d/%m/%Y %H:%M")
+                    formatted_end_datetime = end_dt.strftime("%d/%m/%Y %H:%M:%S")  # Include seconds
                     break
                 except ValueError:
                     continue
@@ -429,8 +429,8 @@ class MultiServerEventProcessor:
             print("⚠️  No data to merge")
             return
         
-        # Sort by date/time for better readability
-        self.all_excel_data.sort(key=lambda x: datetime.strptime(x['Date/Time'], "%d/%m/%Y %H:%M"))
+        # Sort by date/time for better readability - updated to handle seconds
+        self.all_excel_data.sort(key=lambda x: datetime.strptime(x['Date/Time'], "%d/%m/%Y %H:%M:%S"))
         
         # Create merged Excel file
         if csv_only:
