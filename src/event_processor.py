@@ -14,6 +14,7 @@ class MultiServerEventProcessor:
         self.screenshot_timestamp = screenshot_timestamp
         self.event_categories_summary = {}  # Track categories across all servers
         self.all_excel_data = []  # Store all Excel data for merging
+        self.input_directory_name = None  # Track input directory name for output naming
     
     def read_and_group_events_by_server(self, csv_path):
         """Read events from CSV and group them by server."""
@@ -102,6 +103,9 @@ class MultiServerEventProcessor:
         """Main processing function for multiple servers and ZIP files."""
         print("🔍 Scanning directory...")
         
+        # Store the input directory name for output folder naming
+        self.input_directory_name = os.path.basename(os.path.abspath(directory))
+        
         # Reset summary data for new processing
         self.event_categories_summary = {}
         self.all_excel_data = []
@@ -177,7 +181,7 @@ class MultiServerEventProcessor:
                             if report['zip_files']:
                                 start_date = min(zf['start_date'] for zf in report['zip_files'])
                                 end_date = max(zf['end_date'] for zf in report['zip_files'])
-                                merged_report_date_range = f"{start_date}_{end_date}"
+                                merged_report_date_range = f"{start_date}_{end_date}_{self.input_directory_name}"
                                 break
                     self.create_merged_report(merged_report_date_range)
                 else:
@@ -211,8 +215,8 @@ class MultiServerEventProcessor:
                 start_date = min(zf['start_date'] for zf in zip_files)
                 end_date = max(zf['end_date'] for zf in zip_files)
                 
-                # Create output structure
-                date_range = f"{start_date}_{end_date}"
+                # Create output structure with input directory name
+                date_range = f"{start_date}_{end_date}_{self.input_directory_name}"
                 output_dir = os.path.join(date_range, server_id)
                 screenshots_dir = os.path.join(output_dir, "screenshots")
                 videos_dir = os.path.join(output_dir, "video")
@@ -434,13 +438,13 @@ class MultiServerEventProcessor:
         
         # Create merged Excel file
         if csv_only:
-            merged_excel_path = "merged_events_report_csv_only.xlsx"
+            merged_excel_path = f"merged_events_report_csv_only_{self.input_directory_name}.xlsx"
             print(f"\n📊 Creating CSV-only merged report...")
         else:
             if date_range_dir:
                 merged_excel_path = os.path.join(date_range_dir, "complete_events_report.xlsx")
             else:
-                merged_excel_path = "complete_events_report.xlsx"
+                merged_excel_path = f"complete_events_report_{self.input_directory_name}.xlsx"
         
         excel_report.create_excel_with_links(self.all_excel_data, merged_excel_path)
         
